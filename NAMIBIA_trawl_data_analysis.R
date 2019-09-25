@@ -20,6 +20,8 @@
 ## MINOR ADJUSTMENTS BY Nina da Rocha on 18th Sep 2019
 ## Data from experimental trials 2009-2010 excluded
 
+## re-run by Steffen Oppel on 19 Sept 2019 with revised dataset
+
 
 ##############################################################
 #### load ALL NECESSARY libraries
@@ -58,12 +60,30 @@ names(dat2)
 dat<-rbind(dat1,dat2)
 
 
+##############################################################
+#### REMOVE ALL NOCTURNAL TRAWLS WHERE OBSERVATION EFFORT WAS ZERO
+##############################################################
+
+NIGHTTRAWLS<-dat %>% mutate(Minutes_observed=minute(Minutes_observed)) %>%
+  group_by(OBSTRIP_ID,OBSTRAWL_ID) %>%
+  summarise(obs_eff=sum(Minutes_observed))%>%
+  filter(obs_eff==0)
+dim(dat)
+dat <- dat %>% filter(!OBSTRAWL_ID %in% NIGHTTRAWLS$OBSTRAWL_ID) %>%
+  filter(!is.na(Tori_line_deployed))
+dim(dat)
+
+
+
 ### INFO ON CORRECT DEPLOYMENT OF BSL
 BSL <- read_excel("Trawl data Aug 2019.xlsx", 
                    sheet="3_Trawl")
 
 BSL<- BSL %>% select(OBSTRIP_ID,OBSTRAWL_ID,BSL_Deployment) %>%
-  mutate(BSLcorrect=if_else(BSL_Deployment=="Immediately After Doors","Yes","No"))
+  mutate(BSLcorrect=if_else(BSL_Deployment=="Immediately After Doors","Yes","No")) %>%
+  filter(!OBSTRAWL_ID %in% NIGHTTRAWLS$OBSTRAWL_ID)
+
+
 
 
 ##############################################################
@@ -98,7 +118,7 @@ dat$REG<-ifelse(lubridate::year(dat$Date_Start_Observation)>2015,1,0)
 # add information on correct BSL deployment
 dat<- dat %>% left_join(BSL, by=c('OBSTRIP_ID','OBSTRAWL_ID')) %>%
   mutate(BSLcorrect=if_else(is.na(BSLcorrect),"No",BSLcorrect))
-
+dim(dat)
 
 ## assess whether it is worth to split outcomes and interactions or whether too much data are missing:
 unique(dat$Outcome)
@@ -115,6 +135,8 @@ table(dat$Outcome)
 sum(dat$Number_interactions)
 5/854 ## Under 1 % of observed interactions have an unkown outcome 
 
+
+
 ## Compliance levels in the post-reg period
 
 unique(dat$Tori_line_deployed)
@@ -124,8 +146,8 @@ table(dat$Tori_line_deployed)
 
 table(dat$Tori_line_deployed, dat$REG)
 table(dat$BSLcorrect[dat$Tori_line_deployed=='Yes']) 
-205/356 ## When used, BSLs deployed correctly on 58% of trawls
-205/458 ##BSLs used correctly on 45% of all observed trawls for which we have data post-reg
+136/(136+130)   #when used, BSLs deployed correctly on 51% of trawls
+
 
 
 ##############################################################
@@ -151,35 +173,56 @@ tail(obs.effort)
 
 dat.mort <- dat %>%
   filter(Outcome %in% c("Dead","Possibly Dead")) %>%   
-  group_by(OBSPERIOD_ID) %>%
+  group_by(OBSPERIOD_ID,Species) %>%
   summarize(fatal.interactions = sum(Number_interactions)) 
 dat.mort
 
 
-# SUMMARISE ALL INTERACTIONS (rather than just heavy ones)
+# SUMMARISE ALL HEAVY INTERACTIONS (or heavy and medium)
 
-dat.int <- dat %>%
-  #filter(Interaction_type=="Heavy") %>% 
+dat.heavy <- dat %>%
+  #filter(Interaction_type=="Heavy") %>%   
+  filter(Interaction_type %in% c("Heavy","Medium")) %>% ### alternatively use %in% c("Heavy","Medium")
   group_by(OBSPERIOD_ID) %>%
-  summarize(interactions = sum(Number_interactions))
-
-sum(dat.int$interactions)
+  summarize(heavy.interactions = sum(Number_interactions)) 
+dat.heavy
+sum(dat.heavy$heavy.interactions)
 
 
 # COMBINE DATA TO SUMMARISE BY SETTING OPERATION ETC
 
 NAM.trawl<- left_join(obs.effort,dat.mort, by="OBSPERIOD_ID", fill=0) %>%
-  left_join(dat.int, by="OBSPERIOD_ID", fill=0) %>%
+  left_join(dat.heavy, by="OBSPERIOD_ID", fill=0) %>%
   filter(!is.na(Tori_line_deployed)) %>%
   mutate(fatal.interactions=ifelse(is.na(fatal.interactions),0,fatal.interactions)) %>%
   mutate(fatal.rate = fatal.interactions/obs.effort) %>%
   mutate(heavy.interactions=ifelse(is.na(heavy.interactions),0,heavy.interactions)) %>%
   mutate(heavy.rate = heavy.interactions/obs.effort) 
-  mutate(interactions=ifelse(is.na(interactions),0,interactions)) %>%
-  mutate(int.rate = interactions/obs.effort) 
 dim(NAM.trawl)
 
 ##fwrite(NAM.trawl,"Namibia.trawl.interactions.csv")
+
+
+
+# SUMMARISE ALL FATAL INTERACTIONS BY SPECIES FOR RESULTS
+
+dat %>%
+  filter(Outcome %in% c("Dead","Possibly Dead")) %>%   
+  group_by(Species) %>%
+  summarize(fatal.interactions = sum(Number_interactions)) 
+
+
+
+# SUMMARISE ALL HEAVY INTERACTIONS (or heavy and medium)
+
+deathtally<-dat %>%
+  #filter(Interaction_type=="Heavy") %>%   
+  filter(Interaction_type %in% c("Heavy","Medium")) %>% ### alternatively use %in% c("Heavy","Medium")
+  group_by(REG,Species) %>%
+  summarize(heavy.interactions = sum(Number_interactions)) %>%
+  mutate(prop=(heavy.interactions/sum(heavy.interactions))*100)
+
+fwrite(deathtally,"Namibia.trawl.heavy.interactions_bySpecies.csv")
 
 
 
@@ -190,7 +233,7 @@ dim(NAM.trawl)
 # BASIC SUMMARY OF DATA
 
 rawsummary<-NAM.trawl %>% mutate(count=1) %>% group_by(REG,Tori_line_deployed,Vessel_Activity) %>%
-  summarise(nsets=sum(count),mean.tot.rate=mean(Interaction_rate), sd.tot.rate=sd(Interaction_rate),mean.fatal.rate=mean(fatal.rate), sd.fatal.rate=sd(fatal.rate),mean.int.rate=mean(int.rate), sd.int.rate=sd(int.rate))
+  summarise(nsets=sum(count),mean.tot.rate=mean(Interaction_rate), sd.tot.rate=sd(Interaction_rate),mean.fatal.rate=mean(fatal.rate), sd.fatal.rate=sd(fatal.rate),mean.heavy.rate=mean(heavy.rate), sd.heavy.rate=sd(heavy.rate))
 rawsummary
 fwrite(rawsummary,"Namibia.trawl.interactions_summary.csv")
 
@@ -207,15 +250,17 @@ dat %>% filter(Outcome!="Unknown") %>%
   mutate(count=1) %>%
   group_by(Outcome) %>%
   summarise(n=sum(count))
-14/(14+443)
+14/(14+439)
 
 dat %>% filter(Interaction_type!="n/a") %>%
   mutate(count=1) %>%
   group_by(Interaction_type) %>%
   summarise(n=sum(count))
-(75+115)/(1+75+271+115)
+(75+115)/(75+268+115)  ## proportion of heavy and medium interactions
 
-271/(1+75+271+115)
+268/(75+268+115) ## proportion of light interactions
+
+
 
 
 ##############################################################
@@ -242,8 +287,8 @@ prereg.ci<-boot.ci(prereg,conf=0.95)
 prereg.fat <- boot(NAM.trawl$fatal.rate[NAM.trawl$Tori_line_deployed=="No"], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$Tori_line_deployed=="No"])
 prereg.fat.ci<-boot.ci(prereg.fat,conf=0.95)
 
-prereg.int <- boot(NAM.trawl$int.rate[NAM.trawl$Tori_line_deployed=="No"], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$Tori_line_deployed=="No"])
-prereg.int.ci<-boot.ci(prereg.int,conf=0.95)
+prereg.heavy <- boot(NAM.trawl$heavy.rate[NAM.trawl$Tori_line_deployed=="No"], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$Tori_line_deployed=="No"])
+prereg.heavy.ci<-boot.ci(prereg.heavy,conf=0.95)
 
 
 
@@ -255,8 +300,8 @@ postreg.ci<-boot.ci(postreg,conf=0.95)
 postreg.fat <- boot(NAM.trawl$fatal.rate[NAM.trawl$Tori_line_deployed=="Yes"], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$Tori_line_deployed=="Yes"])
 postreg.fat.ci<-boot.ci(postreg.fat,conf=0.95)
 
-postreg.int <- boot(NAM.trawl$int.rate[NAM.trawl$Tori_line_deployed=="Yes"], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$Tori_line_deployed=="Yes"])
-postreg.int.ci<-boot.ci(postreg.int,conf=0.95)
+postreg.heavy <- boot(NAM.trawl$heavy.rate[NAM.trawl$Tori_line_deployed=="Yes"], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$Tori_line_deployed=="Yes"])
+postreg.heavy.ci<-boot.ci(postreg.heavy,conf=0.95)
 
 
 #### COMPILE OUTPUT INTO A SINGLE TABLE #######
@@ -270,9 +315,9 @@ bootsummary$boot.ucl<-c(prereg.ci$normal[1,3],postreg.ci$normal[1,3])
 bootsummary$boot.mean.fatal<-c(prereg.fat$t0,postreg.fat$t0)
 bootsummary$boot.lcl.fatal<-c(prereg.fat.ci$percent[1,4],postreg.fat.ci$percent[1,4])
 bootsummary$boot.ucl.fatal<-c(prereg.fat.ci$percent[1,5],postreg.fat.ci$percent[1,5])
-bootsummary$boot.mean.int<-c(prereg.int$t0,postreg.int$t0)
-bootsummary$boot.lcl.int<-c(prereg.int.ci$percent[1,4],postreg.int.ci$percent[1,4])
-bootsummary$boot.ucl.int<-c(prereg.int.ci$percent[1,5],postreg.int.ci$percent[1,5])
+bootsummary$boot.mean.heavy<-c(prereg.heavy$t0,postreg.heavy$t0)
+bootsummary$boot.lcl.heavy<-c(prereg.heavy.ci$percent[1,4],postreg.heavy.ci$percent[1,4])
+bootsummary$boot.ucl.heavy<-c(prereg.heavy.ci$percent[1,5],postreg.heavy.ci$percent[1,5])
 
 
 #### CALCULATE THE CHANGE IN INTERACTION RATE ####
@@ -285,12 +330,12 @@ fwrite(bootsummary,"Namibia_trawl_interactions_BSL_comparison.csv")
 
 
 #### PLOT OUTPUT ####
-ggplot(bootsummary[1:2,], aes(x=Tori_line_deployed, y=boot.mean)) +
+ggplot(bootsummary[1:2,], aes(x=Tori_line_deployed, y=boot.mean.heavy)) +
 	geom_point(size=2) +
-  geom_errorbar(aes(ymin=boot.lcl, ymax=boot.ucl), width=.1)+
+  geom_errorbar(aes(ymin=boot.lcl.heavy, ymax=boot.ucl.heavy), width=.1)+
 
   ## format axis ticks
-  scale_y_continuous(name="Number of interactions/hour", limits=c(0,8), breaks=seq(0,8,2), labels=seq(0,8,2))+
+  scale_y_continuous(name="Number of medium and heavy interactions/hour", limits=c(0,1.5), breaks=seq(0,1.5,0.3), labels=seq(0,1.5,0.3))+
 	xlab("Tori lines deployed") +
   
   ## beautification of the axes
@@ -315,35 +360,38 @@ ggplot(bootsummary[1:2,], aes(x=Tori_line_deployed, y=boot.mean)) +
 # 
 # ## stratify the samples
 NAM.correct<- NAM.trawl %>% filter(REG==1) %>%
-  filter(!(Tori_line_deployed=="Yes" & BSLcorrect==0)) %>%
+  filter(!(Tori_line_deployed=="Yes" & BSLcorrect=="No")) %>%
    mutate(group=paste(Vessel_Activity,BSLcorrect, sep="_"))
 NAM.correct$stratum1<-match(NAM.correct$Vessel_Activity,unique(NAM.correct$Vessel_Activity))
 head(NAM.correct)
- 
+
+## this should be the same but isn't - there are 4 trawls where no tori line was 'correctly' deployed!!??
+table(NAM.correct$Tori_line_deployed)
+table(NAM.correct$BSLcorrect)
+
+NAM.correct %>% filter(Tori_line_deployed=="No") %>% filter(BSLcorrect=="Yes")
 
 #### SUMMARISE MEAN AND CI FOR SAMPLES WITHOUT BSL #######
  
 prereg <- boot(NAM.correct$Interaction_rate[NAM.correct$BSLcorrect=="No"], samplemean, R=10000, strata=NAM.correct$stratum1[NAM.correct$BSLcorrect=="No"])
 prereg.ci<-boot.ci(prereg,conf=0.95)
  
-prereg.int <- boot(NAM.correct$int.rate[NAM.correct$BSLcorrect=="No"], samplemean, R=10000, strata=NAM.correct$stratum1[NAM.correct$BSLcorrect=="No"])
-prereg.int.ci<-boot.ci(prereg.int,conf=0.95)
+prereg.heavy <- boot(NAM.correct$heavy.rate[NAM.correct$BSLcorrect=="No"], samplemean, R=10000, strata=NAM.correct$stratum1[NAM.correct$BSLcorrect=="No"])
+prereg.heavy.ci<-boot.ci(prereg.heavy,conf=0.95)
  
- 
- 
+
 #### SUMMARISE MEAN AND CI FOR SAMPLES WITH CORRECTLY DEPLOYED BSL #######
  
 postreg <- boot(NAM.correct$Interaction_rate[NAM.correct$BSLcorrect=="Yes"], samplemean, R=10000, strata=NAM.correct$stratum1[NAM.correct$BSLcorrect=="Yes"])
 postreg.ci<-boot.ci(postreg,conf=0.95)
 
-postreg.int <- boot(NAM.correct$int.rate[NAM.correct$BSLcorrect=="Yes"], samplemean, R=10000, strata=NAM.correct$stratum1[NAM.correct$BSLcorrect=="Yes"])
-postreg.int.ci<-boot.ci(postreg.int,conf=0.95)
+postreg.heavy <- boot(NAM.correct$heavy.rate[NAM.correct$BSLcorrect=="Yes"], samplemean, R=10000, strata=NAM.correct$stratum1[NAM.correct$BSLcorrect=="Yes"])
+postreg.heavy.ci<-boot.ci(postreg.heavy,conf=0.95)
 
 
 #### COMPILE OUTPUT INTO A SINGLE TABLE #######
-## >80% reduction of seabird-cable interactions when tori lines are deployed
 
-table(NAM.correct$Tori_line_deployed)
+
 
 
 bootsummary2<-NAM.correct %>% mutate(count=1) %>% group_by(BSLcorrect) %>%
@@ -351,9 +399,9 @@ bootsummary2<-NAM.correct %>% mutate(count=1) %>% group_by(BSLcorrect) %>%
  bootsummary2$boot.mean<-c(prereg$t0,postreg$t0)
  bootsummary2$boot.lcl<-c(prereg.ci$normal[1,2],postreg.ci$normal[1,2])
  bootsummary2$boot.ucl<-c(prereg.ci$normal[1,3],postreg.ci$normal[1,3])
- bootsummary2$boot.mean.int<-c(prereg.int$t0,postreg.int$t0)
- bootsummary2$boot.lcl.int<-c(prereg.int.ci$percent[1,4],postreg.int.ci$percent[1,4])
- bootsummary2$boot.ucl.int<-c(prereg.int.ci$percent[1,5],postreg.int.ci$percent[1,5])
+ bootsummary2$boot.mean.heavy<-c(prereg.heavy$t0,postreg.heavy$t0)
+ bootsummary2$boot.lcl.heavy<-c(prereg.heavy.ci$percent[1,4],postreg.heavy.ci$percent[1,4])
+ bootsummary2$boot.ucl.heavy<-c(prereg.heavy.ci$percent[1,5],postreg.heavy.ci$percent[1,5])
 bootsummary2
 
 #### CALCULATE THE CHANGE IN INTERACTION RATE ####
@@ -384,6 +432,9 @@ ggplot(bootsummary2[1:2,], aes(x=BSLcorrect, y=boot.mean)) +
         strip.background=element_rect(fill="white", colour="black"))
 
 
+
+
+
 ##############################################################
 #### PRODUCE BOOTSTRAPPED CONFIDENCE INTERVALS FOR REGULATION
 ##############################################################
@@ -404,8 +455,8 @@ prereg.ci<-boot.ci(prereg,conf=0.95)
 prereg.fat <- boot(NAM.trawl$fatal.rate[NAM.trawl$REG==0], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$REG==0])
 prereg.fat.ci<-boot.ci(prereg.fat,conf=0.95)
 
-prereg.int <- boot(NAM.trawl$int.rate[NAM.trawl$REG==0], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$REG==0])
-prereg.int.ci<-boot.ci(prereg.int,conf=0.95)
+prereg.heavy <- boot(NAM.trawl$heavy.rate[NAM.trawl$REG==0], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$REG==0])
+prereg.heavy.ci<-boot.ci(prereg.heavy,conf=0.95)
 
 
 
@@ -417,8 +468,8 @@ postreg.ci<-boot.ci(postreg,conf=0.95)
 postreg.fat <- boot(NAM.trawl$fatal.rate[NAM.trawl$REG==1], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$REG==1])
 postreg.fat.ci<-boot.ci(postreg.fat,conf=0.95)
 
-postreg.int <- boot(NAM.trawl$int.rate[NAM.trawl$REG==1], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$REG==1])
-postreg.int.ci<-boot.ci(postreg.int,conf=0.95)
+postreg.heavy <- boot(NAM.trawl$heavy.rate[NAM.trawl$REG==1], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$REG==1])
+postreg.heavy.ci<-boot.ci(postreg.heavy,conf=0.95)
 
 
 
@@ -433,9 +484,9 @@ bootsummary$boot.ucl<-c(prereg.ci$normal[1,3],postreg.ci$normal[1,3])
 bootsummary$boot.mean.fatal<-c(prereg.fat$t0,postreg.fat$t0)
 bootsummary$boot.lcl.fatal<-c(prereg.fat.ci$percent[1,4],postreg.fat.ci$percent[1,4])
 bootsummary$boot.ucl.fatal<-c(prereg.fat.ci$percent[1,5],postreg.fat.ci$percent[1,5])
-bootsummary$boot.mean.int<-c(prereg.int$t0,postreg.int$t0)
-bootsummary$boot.lcl.int<-c(prereg.int.ci$percent[1,4],postreg.int.ci$percent[1,4])
-bootsummary$boot.ucl.int<-c(prereg.int.ci$percent[1,5],postreg.int.ci$percent[1,5])
+bootsummary$boot.mean.heavy<-c(prereg.heavy$t0,postreg.heavy$t0)
+bootsummary$boot.lcl.heavy<-c(prereg.heavy.ci$percent[1,4],postreg.heavy.ci$percent[1,4])
+bootsummary$boot.ucl.heavy<-c(prereg.heavy.ci$percent[1,5],postreg.heavy.ci$percent[1,5])
 
 
 #### CALCULATE THE CHANGE IN INTERACTION RATE ####
@@ -443,6 +494,7 @@ percchange<-function(x){((x[1]-x[2])/x[1])*100}
 bootsummary[3,3:11]<-apply(as.matrix(bootsummary[,3:11]),2,percchange)
 bootsummary[3,1]<-"CHANGE(%)"
 bootsummary
+
 
 
 fwrite(bootsummary,"Namibia_trawl_interactions_REG_comparison.csv")
@@ -509,6 +561,8 @@ WETeffsummary<- WETeff %>% mutate(Year=year(DATE)) %>%
          bycatch.ucl=tot_effort*bootsummary$boot.ucl.fatal[match(REG,bootsummary$REG)])
 
 
+fwrite(FReffsummary,"Namibia_freeze_trawl_extrapolations.csv")
+fwrite(WETeffsummary,"Namibia_wetfish_trawl_extrapolations.csv")
 
 
 
