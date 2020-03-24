@@ -23,6 +23,8 @@
 
 ## UPDATED on 13 Sept to include extrapolation of fleet-wide effort
 
+## REVISION of manuscript on 24 March 2020 - included sunrise to quantify pre-dawn setting proportion
+
 
 ##############################################################
 #### load ALL NECESSARY libraries
@@ -35,6 +37,43 @@ library(jagsUI)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(suncalc)  ## for sunrise calculations
+library(readxl)
+filter<-dplyr::filter
+select<-dplyr::select
+
+
+##############################################################
+#### CALCULATE PROPORTION OF LONGLINE SETS THAT WERE COMPLETED BEFORE NAUTICAL DAWN (Reviewer request)
+##############################################################
+
+setwd("C:\\STEFFEN\\RSPB\\Marine\\Bycatch\\Namibia")
+#setdat<-read_excel("Data\\Namibia_Demersal_Longline_Data_October 18.xlsx", sheet="4_Set") ## did not work because dates and times were messed up
+setdat<-fread("Data\\Namibia_Demersal_Longline_SettingTimes.csv")
+setdat <- setdat %>% 
+  mutate(START=dmy_hm(paste(Date_Start_Set,Time_Start_Set," "))) %>%
+  mutate(END=dmy_hm(paste(Date_End_Set,Time_End_Set," "))) %>%
+  mutate(date=as.Date(END,origin="1970-01-01")) %>%
+  mutate(lat=as.numeric(Latitude_End_Set),lon=as.numeric(Longitude_End_Set))
+
+## SET THE TIME ZONE TO NAMIBIAN TIME
+tz(setdat$END)<-"Africa/Windhoek"
+
+## CALCULATE DAWN TIME AND ADJUST TIME ZONE TO NAMIBIA
+setdat$dawn <- getSunlightTimes(data=setdat, keep = c("sunrise"), tz = "UTC")[,4]
+setdat$dawn <- with_tz(setdat$dawn,tzone="Africa/Windhoek")
+tail(setdat)
+
+## SUMMARISE PROPORTION OF SETS COMPLETED BEFORE DAWN
+setdat %>% mutate(beforeDawn=ifelse(END < dawn,1,0)) %>%
+  mutate(beforeDawn=ifelse(hour(END)>19,1,beforeDawn)) %>%
+  mutate(dawndiff=ifelse(hour(END)>19,as.numeric(difftime(END,dawn,units="hours"))-24,as.numeric(difftime(END,dawn,units="hours")))) %>%
+  mutate(year=year(START)) %>%
+  #filter(year==2016)
+  #group_by(year) %>%
+  summarise(prop=sum(beforeDawn)/length(beforeDawn), diff=mean(dawndiff), diff_sd=sd(dawndiff))
+
+
 
 
 ##############################################################
@@ -42,7 +81,7 @@ library(ggplot2)
 ##############################################################
 
 setwd("C:\\STEFFEN\\RSPB\\Marine\\Bycatch\\Namibia")
-data<-fread("ATF_Namibia_Longline_Bycatch_data2009_2019.csv")
+data<-fread("Data\\ATF_Namibia_Longline_Bycatch_data2009_2019.csv")
 head(data)
 
 
@@ -58,8 +97,8 @@ head(data)
 data %>% dplyr::filter(!is.na(Hooks_Recovered)) %>%
   dplyr::filter(!is.na(Hooks_Observed)) %>%
   mutate(ratio=Hooks_Observed/Hooks_Recovered) %>%
-  group_by(Year, Regulation) %>%
-  summarise(mean=mean(ratio,na.rm=T), sd=sd(ratio,na.rm=T))
+  group_by(Regulation) %>%
+  summarise(mean=mean(ratio,na.rm=T), sd=sd(ratio,na.rm=T), min=min(ratio,na.rm=T), max=max(ratio,na.rm=T))
 
 
 ## THE FOA Observer ratio is much higher (and cannot be trusted)
@@ -122,6 +161,12 @@ head(data)
 data %>% group_by(Regulation) %>% mutate(count=1) %>%
   summarise(nships=length(unique(VESSEL_ID)),ntrips=length(unique(Trip_ID)),nsets=sum(count))
 
+data %>% mutate(OBS=ifelse(is.na(Hooks_Observed),"FAO","ATF")) %>%
+  mutate(count=1) %>%
+  filter(OBS=="ATF")
+  group_by(OBS,Regulation) %>% 
+  summarise(nsets=sum(count))
+
 
 ### for Results
 data %>%
@@ -177,7 +222,7 @@ model{
   for(t in 1:ntrips){
     occ.trip[t]~dnorm(0,tau.occ.trip)    ## trip-specific random effect for occurrence
     abund.trip[t]~dnorm(0,tau.ab.trip)    ## trip-specific random effect for abundance
-    obs.trip[t]~dnorm(0,tau.obs.trip)    ## trip-specific random effect for occurrence
+    obs.trip[t]~dnorm(0,tau.obs.trip)    ## trip-specific random effect for observation effort
     }
   tau.obs.trip<-1/(sigma.obs.trip*sigma.obs.trip)
   sigma.obs.trip~dunif(0,10)
