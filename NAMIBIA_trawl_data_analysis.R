@@ -739,12 +739,12 @@ NAM.set<- NAM.trawl %>%
   filter(Vessel_Activity=="Set")
 
 #### SUMMARISE MEAN AND CI FOR PRE-REG SAMPLES #######
-prereg.heavy <- boot(NAM.set$heavy.rate[NAM.trawl$Tori_line_deployed=="No"], samplemean, R=10000)
+prereg.heavy <- boot(NAM.set$heavy.rate[NAM.set$Tori_line_deployed=="No"], samplemean, R=10000)
 prereg.heavy.ci<-boot.ci(prereg.heavy,conf=0.95)
 
 
 #### SUMMARISE MEAN AND CI FOR POST-REG SAMPLES #######
-postreg.heavy <- boot(NAM.set$heavy.rate[NAM.trawl$Tori_line_deployed=="Yes"], samplemean, R=10000)
+postreg.heavy <- boot(NAM.set$heavy.rate[NAM.set$Tori_line_deployed=="Yes"], samplemean, R=10000)
 postreg.heavy.ci<-boot.ci(postreg.heavy,conf=0.95)
 
 #### COMPILE OUTPUT INTO A SINGLE TABLE #######
@@ -761,182 +761,6 @@ percchange<-function(x){((x[1]-x[2])/x[1])*100}
 bootsummary[3,3:5]<-apply(as.matrix(bootsummary[,3:5]),2,percchange)
 bootsummary[3,1]<-"CHANGE(%)"
 bootsummary
-
-
-
-
-
-
-##############################################################
-#### PRODUCE BOOTSTRAPPED CONFIDENCE INTERVALS FOR TORI LINES
-##############################################################
-
-
-## stratify the samples
-NAM.trawl<- NAM.trawl %>%
-  mutate(group=paste(Vessel_Activity,Tori_line_deployed, sep="_"))
-NAM.trawl$stratum1<-match(NAM.trawl$Vessel_Activity,unique(NAM.trawl$Vessel_Activity))
-head(NAM.trawl)
-
-samplemean <- function(x, d) {
-  return(mean(x[d]))
-}
-
-
-#### SUMMARISE MEAN AND CI FOR PRE-REG SAMPLES #######
-
-prereg <- boot(NAM.trawl$Interaction_rate[NAM.trawl$Tori_line_deployed=="No"], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$Tori_line_deployed=="No"])
-prereg.ci<-boot.ci(prereg,conf=0.95)
-
-prereg.fat <- boot(NAM.trawl$fatal.rate[NAM.trawl$Tori_line_deployed=="No"], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$Tori_line_deployed=="No"])
-prereg.fat.ci<-boot.ci(prereg.fat,conf=0.95)
-
-prereg.heavy <- boot(NAM.trawl$heavy.rate[NAM.trawl$Tori_line_deployed=="No"], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$Tori_line_deployed=="No"])
-prereg.heavy.ci<-boot.ci(prereg.heavy,conf=0.95)
-
-
-
-#### SUMMARISE MEAN AND CI FOR POST-REG SAMPLES #######
-
-postreg <- boot(NAM.trawl$Interaction_rate[NAM.trawl$Tori_line_deployed=="Yes"], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$Tori_line_deployed=="Yes"])
-postreg.ci<-boot.ci(postreg,conf=0.95)
-
-postreg.fat <- boot(NAM.trawl$fatal.rate[NAM.trawl$Tori_line_deployed=="Yes"], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$Tori_line_deployed=="Yes"])
-postreg.fat.ci<-boot.ci(postreg.fat,conf=0.95)
-
-postreg.heavy <- boot(NAM.trawl$heavy.rate[NAM.trawl$Tori_line_deployed=="Yes"], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$Tori_line_deployed=="Yes"])
-postreg.heavy.ci<-boot.ci(postreg.heavy,conf=0.95)
-
-
-#### COMPILE OUTPUT INTO A SINGLE TABLE #######
-## >80% reduction of seabird-cable interactions when tori lines are deployed
-
-bootsummary<-NAM.trawl %>% mutate(count=1) %>% group_by(Tori_line_deployed) %>%
-  summarise(nsets=sum(count))
-bootsummary$boot.mean<-c(prereg$t0,postreg$t0)
-bootsummary$boot.lcl<-c(prereg.ci$normal[1,2],postreg.ci$normal[1,2])
-bootsummary$boot.ucl<-c(prereg.ci$normal[1,3],postreg.ci$normal[1,3])
-bootsummary$boot.mean.fatal<-c(prereg.fat$t0,postreg.fat$t0)
-bootsummary$boot.lcl.fatal<-c(prereg.fat.ci$percent[1,4],postreg.fat.ci$percent[1,4])
-bootsummary$boot.ucl.fatal<-c(prereg.fat.ci$percent[1,5],postreg.fat.ci$percent[1,5])
-bootsummary$boot.mean.heavy<-c(prereg.heavy$t0,postreg.heavy$t0)
-bootsummary$boot.lcl.heavy<-c(prereg.heavy.ci$percent[1,4],postreg.heavy.ci$percent[1,4])
-bootsummary$boot.ucl.heavy<-c(prereg.heavy.ci$percent[1,5],postreg.heavy.ci$percent[1,5])
-
-
-#### CALCULATE THE CHANGE IN INTERACTION RATE ####
-percchange<-function(x){((x[1]-x[2])/x[1])*100}
-bootsummary[3,3:11]<-apply(as.matrix(bootsummary[,3:11]),2,percchange)
-bootsummary[3,1]<-"CHANGE(%)"
-bootsummary
-
-fwrite(bootsummary,"Namibia_trawl_interactions_BSL_comparison.csv")
-
-
-#### PLOT OUTPUT ####
-ggplot(bootsummary[1:2,], aes(x=Tori_line_deployed, y=boot.mean.heavy)) +
-  geom_point(size=2) +
-  geom_errorbar(aes(ymin=boot.lcl.heavy, ymax=boot.ucl.heavy), width=.1)+
-  
-  ## format axis ticks
-  scale_y_continuous(name="Number of medium and heavy interactions/hour", limits=c(0,1.5), breaks=seq(0,1.5,0.3), labels=seq(0,1.5,0.3))+
-  xlab("Tori lines deployed") +
-  
-  ## beautification of the axes
-  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        axis.text.y=element_text(size=18, color="black"),
-        axis.text.x=element_text(size=18, color="black"), 
-        axis.title=element_text(size=18), 
-        strip.text.x=element_text(size=18, color="black"),
-        strip.text.y=element_text(size=18, color="black"),
-        axis.title.y=element_text(margin=margin(0,20,0,0)), 
-        strip.background=element_rect(fill="white", colour="black"))
-
-
-
-##############################################################
-#### PRODUCE BOOTSTRAPPED CONFIDENCE INTERVALS FOR REGULATION
-##############################################################
-
-
-## stratify the samples
-NAM.trawl<- NAM.trawl %>%
-  mutate(group=paste(Vessel_Activity,REG, sep="_"))
-NAM.trawl$stratum1<-match(NAM.trawl$Vessel_Activity,unique(NAM.trawl$Vessel_Activity))
-head(NAM.trawl)
-
-
-#### SUMMARISE MEAN AND CI FOR PRE-REG SAMPLES #######
-
-prereg <- boot(NAM.trawl$Interaction_rate[NAM.trawl$REG==0], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$REG==0])
-prereg.ci<-boot.ci(prereg,conf=0.95)
-
-prereg.fat <- boot(NAM.trawl$fatal.rate[NAM.trawl$REG==0], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$REG==0])
-prereg.fat.ci<-boot.ci(prereg.fat,conf=0.95)
-
-prereg.heavy <- boot(NAM.trawl$heavy.rate[NAM.trawl$REG==0], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$REG==0])
-prereg.heavy.ci<-boot.ci(prereg.heavy,conf=0.95)
-
-
-
-#### SUMMARISE MEAN AND CI FOR POST-REG SAMPLES #######
-
-postreg <- boot(NAM.trawl$Interaction_rate[NAM.trawl$REG==1], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$REG==1])
-postreg.ci<-boot.ci(postreg,conf=0.95)
-
-postreg.fat <- boot(NAM.trawl$fatal.rate[NAM.trawl$REG==1], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$REG==1])
-postreg.fat.ci<-boot.ci(postreg.fat,conf=0.95)
-
-postreg.heavy <- boot(NAM.trawl$heavy.rate[NAM.trawl$REG==1], samplemean, R=10000, strata=NAM.trawl$stratum1[NAM.trawl$REG==1])
-postreg.heavy.ci<-boot.ci(postreg.heavy,conf=0.95)
-
-
-
-#### COMPILE OUTPUT INTO A SINGLE TABLE #######
-## >80% reduction of seabird-cable interactions when tori lines are deployed
-
-bootsummary<-NAM.trawl %>% mutate(count=1) %>% group_by(REG) %>%
-  summarise(nsets=sum(count))
-bootsummary$boot.mean<-c(prereg$t0,postreg$t0)
-bootsummary$boot.lcl<-c(prereg.ci$normal[1,2],postreg.ci$normal[1,2])
-bootsummary$boot.ucl<-c(prereg.ci$normal[1,3],postreg.ci$normal[1,3])
-bootsummary$boot.mean.fatal<-c(prereg.fat$t0,postreg.fat$t0)
-bootsummary$boot.lcl.fatal<-c(prereg.fat.ci$percent[1,4],postreg.fat.ci$percent[1,4])
-bootsummary$boot.ucl.fatal<-c(prereg.fat.ci$percent[1,5],postreg.fat.ci$percent[1,5])
-bootsummary$boot.mean.heavy<-c(prereg.heavy$t0,postreg.heavy$t0)
-bootsummary$boot.lcl.heavy<-c(prereg.heavy.ci$percent[1,4],postreg.heavy.ci$percent[1,4])
-bootsummary$boot.ucl.heavy<-c(prereg.heavy.ci$percent[1,5],postreg.heavy.ci$percent[1,5])
-
-
-#### CALCULATE THE CHANGE IN INTERACTION RATE ####
-percchange<-function(x){((x[1]-x[2])/x[1])*100}
-bootsummary[3,3:11]<-apply(as.matrix(bootsummary[,3:11]),2,percchange)
-bootsummary[3,1]<-"CHANGE(%)"
-bootsummary
-
-
-
-fwrite(bootsummary,"Namibia_trawl_interactions_REG_comparison.csv")
-
-
-#### PLOT OUTPUT ####
-ggplot(bootsummary[1:2,], aes(x=REG, y=boot.mean)) +
-  geom_point(size=2) +
-  geom_errorbar(aes(ymin=boot.lcl, ymax=boot.ucl), width=.1)+
-  
-  ## format axis ticks
-  scale_y_continuous(name="N seabird-cable interactions per hour", limits=c(0,8), breaks=seq(0,8,2), labels=seq(0,8,2))+
-  xlab("Fisheries regulation in effect") +
-  
-  ## beautification of the axes
-  theme(panel.background=element_rect(fill="white", colour="black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        axis.text.y=element_text(size=18, color="black"),
-        axis.text.x=element_text(size=18, color="black"), 
-        axis.title=element_text(size=18), 
-        strip.text.x=element_text(size=18, color="black"),
-        strip.text.y=element_text(size=18, color="black"),
-        axis.title.y=element_text(margin=margin(0,20,0,0)), 
-        strip.background=element_rect(fill="white", colour="black"))
 
 
 
