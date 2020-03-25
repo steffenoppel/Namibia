@@ -23,6 +23,7 @@
 ## re-run by Steffen Oppel on 19 Sept 2019 with revised dataset
 
 ## REVISION of manuscript on 24 March 2020 - included separate analysis for setting, trawling, and haul
+## added observer coverage proportion
 
 
 
@@ -618,6 +619,26 @@ WETeff %>% mutate(Year=year(DATE)) %>%
 
 
 
+##############################################################
+#### CALCULATION OF OBSERVER COVERAGE
+##############################################################
+
+### summarise total observation hours ###
+EFFORT<-obs.effort %>%  mutate(Year=year(Date_Start_Observation)) %>% 
+  group_by(Year,REG) %>%
+  summarize(obs.effort = sum(obs.effort))
+
+### summarise total fishing hours ###
+WETeff %>% mutate(Year=year(DATE)) %>%
+  rename(effort=`DURATION(HOURS)`) %>%
+  mutate(REG=if_else(Year>2015,1,0)) %>%
+  group_by(REG,Year) %>%
+  summarise(tot_effort=sum(effort,na.rm=T)) %>%
+  inner_join(EFFORT, by=c("Year","REG")) %>%
+  ungroup() %>%
+  group_by(REG) %>%
+  summarise(tot_effort=sum(tot_effort), obs.effort=sum(obs.effort)) %>%
+  mutate(obs_rate=(obs.effort/tot_effort)*100)
 
 
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
