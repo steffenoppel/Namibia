@@ -24,6 +24,7 @@
 ## UPDATED on 13 Sept to include extrapolation of fleet-wide effort
 
 ## REVISION of manuscript on 24 March 2020 - included sunrise to quantify pre-dawn setting proportion
+## calculated observer coverage as proportion of hooks deployed on monitored trips
 
 
 ##############################################################
@@ -391,7 +392,7 @@ fwrite(LLsum,"Namibia_longline_bycatch_REG_comparison.csv")
 ##############################################################
 #### EXTRAPOLATION OF FLEET-WIDE MORTALITY
 ##############################################################
-setwd("C:\\STEFFEN\\RSPB\\Marine\\Bycatch\\Namibia")
+setwd("C:\\STEFFEN\\RSPB\\Marine\\Bycatch\\Namibia\\Data")
 
 ## read in fleet-wide effort data
 LLsum<-fread("Namibia_longline_bycatch_REG_comparison.csv")
@@ -424,6 +425,25 @@ fwrite(LLsummary,"Namibia_fleetwide_longline_seabird_mortality.csv")
 
 
 
+
+##############################################################
+#### ASSESSMENT OF SAMPLING REPRESENTATIVITY
+##############################################################
+LLsummary<-LLsummary %>% select(Regulation,Year,tot_effort) %>%
+  bind_rows(data.frame(Regulation="BEFORE",Year =as.numeric(c(2009,2010,2011,2012)), tot_effort=c(47481331,33071604,26131173,31225687)))
+
+
+data %>% 
+  mutate(Total_Hooks_Set=ifelse(is.na(Total_Hooks_Set),Hooks_Recovered/0.913,Total_Hooks_Set)) %>%
+  mutate(Total_Hooks_Set=ifelse(is.na(Total_Hooks_Set),Hooks_Observed/(0.913*0.58),Total_Hooks_Set)) %>%
+  group_by(Year, Regulation) %>%
+  summarise(obs=sum(Total_Hooks_Set)) %>%
+  inner_join(LLsummary, by=c("Year","Regulation")) %>%
+  ungroup() %>%
+  group_by(Regulation) %>%
+  summarise(obs=sum(obs),tot_effort=sum(tot_effort)) %>%
+  mutate(obs_ratio=obs/tot_effort) %>%
+  select(tot_effort,obs,obs_ratio)
 
 
 
