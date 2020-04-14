@@ -44,6 +44,96 @@ filter<-dplyr::filter
 select<-dplyr::select
 
 
+
+
+#######################################################################
+#### PLOT FIGURE 1 WITH REGULATION AND OBSERVER TYPE (Reviewer request)
+#######################################################################
+
+### READ IN THE LONGLINE DATA
+setwd("C:\\STEFFEN\\RSPB\\Marine\\Bycatch\\Namibia")
+LLdat<-read_excel("Data\\LL data combined 2016-2018.xlsx", sheet="Sheet1") ## not sure this has all data?
+head(LLdat)
+
+LLdat <- LLdat %>% 
+  mutate(LAT=LAT_DEG_Shoot+(LAT_MIN_Shoot/60)) %>%
+  mutate(LON=LON_DEG_Shoot+(LON_MIN_Shoot/60)) %>%
+  mutate(Period=ifelse(Year<2015,"before regulation","with regulation")) %>%
+  select(Period,Year,Month,Day,LAT,LON,Effort) %>%
+  mutate(Fishery="Demersal longline")
+
+LLdatprereg<-fread("Data\\Namibia Longline Master sheet 05November2013.csv") ## pre-regulation data
+LLdat <- LLdatprereg %>% 
+  rename(LAT=LatS, LON=LongE, Effort=HooksPerLine) %>%
+  mutate(LAT=LAT*(-1)) %>%
+  mutate(Period=ifelse(Year<2015,"before regulation","with regulation")) %>%
+  mutate(Month=month(Date),Day=day(Date)) %>%
+  select(Period,Year,Month,Day,LAT,LON,Effort) %>%
+  mutate(Fishery="Demersal longline") %>%
+  bind_rows(LLdat)
+
+### READ IN THE TRAWL DATA
+setwd("C:\\STEFFEN\\RSPB\\Marine\\Bycatch\\Namibia\\Data")
+dat1 <- read_excel("Wetfish data 2009-2010, 2016-2018.xlsx", sheet="2009-2010")
+dat2 <- read_excel("Wetfish data 2009-2010, 2016-2018.xlsx", sheet="2016-2017")
+WetFishdat<-rbind(dat1,dat2) %>%
+  mutate(Period=ifelse(year(DATE)<2015,"before regulation","with regulation")) %>%
+  mutate(LAT=LatDeg+(LatMin/60)) %>%
+  mutate(LON=LongDeg+(LongMin/60)) %>%
+  rename(Effort=`DURATION(HOURS)`) %>%
+  mutate(Year=year(DATE),Month=month(DATE),Day=day(DATE)) %>%
+  select(Period,Year,Month,Day,LAT,LON,Effort) %>%
+  mutate(Fishery="Trawl (wet fish)")
+
+PLOTDAT<-bind_rows(WetFishdat,LLdat) %>%
+  mutate(LAT=LAT*(-1))
+
+### LOAD EEZ AND BASELINE DATA
+library(sf)
+setwd("C:\\STEFFEN\\RSPB\\Marine\\World_EEZ")
+EEZ<-st_read("World_EEZ_v8_2014_HR.shp") %>% filter (Country=="Namibia")
+
+library("rnaturalearth")
+library("rnaturalearthdata")
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+
+### CREATE FIGURE 1 ###
+
+ggplot(data = world) + 
+  geom_sf(fill="lightgrey",color = "black", lwd=0.5) +
+  geom_sf(data=EEZ, color = "midnightblue", lwd=1.5, fill=NA) +
+  coord_sf(ylim = c(-30,-17),  xlim = c(11,17))+
+
+  ### ADD FISHING LOCATIONS
+  geom_point(data=PLOTDAT, aes(x=LON, y=LAT), size=0.4, colour="lightcoral") +   #, colour=Period
+  facet_grid(Period~Fishery) +
+  
+  ### ADJUST AXES AND LABELS
+  #guides(fill=guide_legend(title="Time period"))+
+  xlab("Longitude")+
+  ylab("Latitude")+
+
+  ## beautification of the axes
+  theme(panel.background=element_rect(fill="white", colour="black"),
+        plot.margin=unit(c(5,0,5,0),"mm"),
+        axis.text.y=element_text(size=14, color="black"),
+        axis.text.x=element_text(size=12, color="black", angle=45,vjust=0.5), 
+        axis.title=element_text(size=16),
+        legend.background = element_rect(),
+        legend.title = element_text(size=16),
+        legend.key = element_blank(),
+        legend.text=element_text(size=14),
+        strip.text=element_text(size=15, color="black"), 
+        strip.background=element_rect(fill="white", colour="black"))
+
+ggsave("Figure1.jpg", width=7, height=12)
+
+
+
+
+
+
 ##############################################################
 #### CALCULATE PROPORTION OF LONGLINE SETS THAT WERE COMPLETED BEFORE NAUTICAL DAWN (Reviewer request)
 ##############################################################
@@ -55,7 +145,22 @@ setdat <- setdat %>%
   mutate(START=dmy_hm(paste(Date_Start_Set,Time_Start_Set," "))) %>%
   mutate(END=dmy_hm(paste(Date_End_Set,Time_End_Set," "))) %>%
   mutate(date=as.Date(END,origin="1970-01-01")) %>%
-  mutate(lat=as.numeric(Latitude_End_Set),lon=as.numeric(Longitude_End_Set))
+  mutate(lat=as.numeric(Latitude_End_Set),lon=as.numeric(Longitude_End_Set)) %>%
+  select(START,END,date,lat,lon)
+dim(setdat)
+
+## add pre-regulation data
+LLdatprereg<-fread("Data\\Namibia Longline Master sheet 05November2013.csv") 
+setdat <- LLdatprereg %>% 
+  mutate(START=dmy_hm(paste(Date,ShootStarttime," "))) %>%
+  mutate(END=dmy_hm(paste(Date,ShootEndTime," "))) %>%
+  mutate(date=as.Date(END,origin="1970-01-01")) %>%
+  mutate(lat=as.numeric(LatS),lon=as.numeric(LongE)) %>%
+  filter(!is.na(START)) %>%
+  filter(!is.na(END)) %>%
+  select(START,END,date,lat,lon) %>%
+  bind_rows(setdat)
+dim(setdat)
 
 ## SET THE TIME ZONE TO NAMIBIAN TIME
 tz(setdat$END)<-"Africa/Windhoek"
@@ -66,13 +171,16 @@ setdat$dawn <- with_tz(setdat$dawn,tzone="Africa/Windhoek")
 tail(setdat)
 
 ## SUMMARISE PROPORTION OF SETS COMPLETED BEFORE DAWN
-setdat %>% mutate(beforeDawn=ifelse(END < dawn,1,0)) %>%
+export<-setdat %>% mutate(beforeDawn=ifelse(END < dawn,1,0)) %>%
   mutate(beforeDawn=ifelse(hour(END)>19,1,beforeDawn)) %>%
   mutate(dawndiff=ifelse(hour(END)>19,as.numeric(difftime(END,dawn,units="hours"))-24,as.numeric(difftime(END,dawn,units="hours")))) %>%
   mutate(year=year(START)) %>%
   #filter(year==2016)
-  #group_by(year) %>%
-  summarise(prop=sum(beforeDawn)/length(beforeDawn), diff=mean(dawndiff), diff_sd=sd(dawndiff))
+  group_by(year) %>%
+  summarise(prop=sum(beforeDawn)/length(beforeDawn), diff=mean(dawndiff), diff_sd=sd(dawndiff)) %>%
+  rename(`prop set before sunrise`=prop, `mean time to sunrise (hrs)`=diff,`sd time to sunrise (hrs)`=diff_sd)
+
+fwrite(export,"Namibia_LL_set_sunrise_proportions.csv")
 
 
 
@@ -164,7 +272,7 @@ data %>% group_by(Regulation) %>% mutate(count=1) %>%
 
 data %>% mutate(OBS=ifelse(is.na(Hooks_Observed),"FAO","ATF")) %>%
   mutate(count=1) %>%
-  filter(OBS=="ATF")
+  filter(OBS=="ATF") %>%
   group_by(OBS,Regulation) %>% 
   summarise(nsets=sum(count))
 
