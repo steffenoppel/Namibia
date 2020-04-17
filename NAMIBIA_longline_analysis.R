@@ -88,6 +88,19 @@ WetFishdat<-rbind(dat1,dat2) %>%
 PLOTDAT<-bind_rows(WetFishdat,LLdat) %>%
   mutate(LAT=LAT*(-1))
 
+### NINA PROVIDED THIS FILE ON 16 APRIL 2020 WHICH INCLUDES ALL DATA
+PLOTDAT<-read_excel("ALL_fishing_effort_spatial.xlsx", sheet="Data for plot") %>% ## not sure this has all data?
+	mutate(LAT=LatDeg+(LatMin/60)) %>%
+  	mutate(LON=LongDeg+(LongMin/60)) %>%
+  	mutate(period=ifelse(period=='pre',"before regulation","with regulation")) %>%
+  	mutate(fishery=ifelse(fishery=="trawl","Trawl (wet fish)","Longline"))#%>%
+  	#mutate(LAT=LAT*(-1))
+
+head(PLOTDAT)
+
+
+
+
 ### LOAD EEZ AND BASELINE DATA
 library(sf)
 setwd("C:\\STEFFEN\\RSPB\\Marine\\World_EEZ")
@@ -104,13 +117,18 @@ ggplot(data = world) +
   geom_sf(fill="lightgrey",color = "black", lwd=0.5) +
   geom_sf(data=EEZ, color = "midnightblue", lwd=1.5, fill=NA) +
   coord_sf(ylim = c(-30,-17),  xlim = c(11,17))+
+  #coord_sf(ylim = c(-85,30),  xlim = c(-50,50))+
 
   ### ADD FISHING LOCATIONS
-  geom_point(data=PLOTDAT, aes(x=LON, y=LAT), size=0.4, colour="lightcoral") +   #, colour=Period
-  facet_grid(Period~Fishery) +
+  geom_point(data=PLOTDAT, aes(x=LongDeg, y=LatDeg), size=1,color='red') +   #, colour=Period,colour=observed
+  facet_grid(period~fishery) +
+  geom_sf(fill="lightgrey",color = "black", lwd=0.5) +
   
   ### ADJUST AXES AND LABELS
-  #guides(fill=guide_legend(title="Time period"))+
+  guides(colour=guide_legend(title="Observer"))+
+  scale_color_viridis_d(begin = .2, end = .8, direction = 1, name = "Observer:”) + for the tracks
+  scale_fill_viridis_d(begin = .2, end = .8, direction = -1, option = "B", name = "fate:”) + for fates
+
   xlab("Longitude")+
   ylab("Latitude")+
 
@@ -159,8 +177,31 @@ setdat <- LLdatprereg %>%
   filter(!is.na(START)) %>%
   filter(!is.na(END)) %>%
   select(START,END,date,lat,lon) %>%
+  bind_rows(setdat) %>%
+  mutate(Observer="ATF")
+dim(setdat)
+
+## calculate mean setlength so we can add it to the FOA data
+setdat %>% mutate(setlength=as.numeric(difftime(END,START,units="hours"))) %>%
+	#group_by(year(END)) %>%
+	summarise(dtime=mean(setlength))
+
+## add FOA observer data
+setwd("C:\\STEFFEN\\RSPB\\Marine\\Bycatch\\Namibia")
+foadat<-read_excel("Data\\OBSERVER_Data_Final_OBSERVERS AND TRIPS_REVISED OCTOBER 2019.xlsx", sheet="LONGLINE_DATA") ## did not work because dates and times were messed up
+hour(foadat$Date_Start_Set)<-hour(foadat$Time_Start_Set)
+minute(foadat$Date_Start_Set)<-minute(foadat$Time_Start_Set)
+setdat <- foadat %>% 
+  rename(START=Date_Start_Set) %>%
+  filter(!is.na(START)) %>%
+  mutate(END=START + hours(2)) %>%
+  mutate(date=as.Date(END,origin="1970-01-01")) %>%
+  mutate(lat=as.numeric(Latitude_Start_Set),lon=as.numeric(Longitude_Start_Set)) %>%
+  select(START,END,date,lat,lon) %>%
+  mutate(Observer="FOA") %>%
   bind_rows(setdat)
 dim(setdat)
+head(setdat)
 
 ## SET THE TIME ZONE TO NAMIBIAN TIME
 tz(setdat$END)<-"Africa/Windhoek"
@@ -176,7 +217,7 @@ export<-setdat %>% mutate(beforeDawn=ifelse(END < dawn,1,0)) %>%
   mutate(dawndiff=ifelse(hour(END)>19,as.numeric(difftime(END,dawn,units="hours"))-24,as.numeric(difftime(END,dawn,units="hours")))) %>%
   mutate(year=year(START)) %>%
   #filter(year==2016)
-  group_by(year) %>%
+  group_by(year,Observer) %>%
   summarise(prop=sum(beforeDawn)/length(beforeDawn), diff=mean(dawndiff), diff_sd=sd(dawndiff)) %>%
   rename(`prop set before sunrise`=prop, `mean time to sunrise (hrs)`=diff,`sd time to sunrise (hrs)`=diff_sd)
 
