@@ -40,8 +40,19 @@ library(tidyr)
 library(ggplot2)
 library(suncalc)  ## for sunrise calculations
 library(readxl)
+library(viridis)
 filter<-dplyr::filter
 select<-dplyr::select
+
+### LOAD EEZ AND BASELINE DATA
+library(sf)
+setwd("C:\\STEFFEN\\RSPB\\Marine\\World_EEZ")
+EEZ<-st_read("World_EEZ_v8_2014_HR.shp") %>% filter (Country=="Namibia")
+
+library("rnaturalearth")
+library("rnaturalearthdata")
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
 
 
 
@@ -90,45 +101,41 @@ PLOTDAT<-bind_rows(WetFishdat,LLdat) %>%
 
 ### NINA PROVIDED THIS FILE ON 16 APRIL 2020 WHICH INCLUDES ALL DATA
 PLOTDAT<-read_excel("ALL_fishing_effort_spatial.xlsx", sheet="Data for plot") %>% ## not sure this has all data?
-	mutate(LAT=LatDeg+(LatMin/60)) %>%
+	filter(!is.na(LatDeg)) %>%
+  mutate(LAT=LatDeg+(LatMin/60)) %>%
   	mutate(LON=LongDeg+(LongMin/60)) %>%
   	mutate(period=ifelse(period=='pre',"before regulation","with regulation")) %>%
-  	mutate(fishery=ifelse(fishery=="trawl","Trawl (wet fish)","Longline"))#%>%
-  	#mutate(LAT=LAT*(-1))
+  	mutate(fishery=ifelse(fishery=="trawl","Trawl (wet fish)","Longline")) %>%
+  mutate(observed=ifelse(observed=="no","none",observed)) %>%
+  	mutate(LAT=LAT*(-1))
 
 head(PLOTDAT)
+dim(PLOTDAT)
 
 
+### REMOVE LOCATIONS ON LAND
 
 
-### LOAD EEZ AND BASELINE DATA
-library(sf)
-setwd("C:\\STEFFEN\\RSPB\\Marine\\World_EEZ")
-EEZ<-st_read("World_EEZ_v8_2014_HR.shp") %>% filter (Country=="Namibia")
-
-library("rnaturalearth")
-library("rnaturalearthdata")
-world <- ne_countries(scale = "medium", returnclass = "sf")
 
 
 ### CREATE FIGURE 1 ###
 
 ggplot(data = world) + 
+  
+  ### ADD FISHING LOCATIONS
+  geom_point(data=PLOTDAT, aes(x=LON, y=LAT,colour=observed), size=0.5) +   #, colour=Period,colour=observed
+  geom_point(data=PLOTDAT[PLOTDAT$observed=="FOA",], aes(x=LON, y=LAT), size=0.7,colour="#56B4E9") + 
+  geom_point(data=PLOTDAT[PLOTDAT$observed=="ATF",], aes(x=LON, y=LAT), size=0.8,colour="#E69F00") +   #, colour=Period,colour=observed
+  
+  ### ADD MAPPING BACKGROUND
   geom_sf(fill="lightgrey",color = "black", lwd=0.5) +
   geom_sf(data=EEZ, color = "midnightblue", lwd=1.5, fill=NA) +
-  coord_sf(ylim = c(-30,-17),  xlim = c(11,17))+
-  #coord_sf(ylim = c(-85,30),  xlim = c(-50,50))+
+  coord_sf(ylim = c(-30,-17),  xlim = c(10,16))+
 
-  ### ADD FISHING LOCATIONS
-  geom_point(data=PLOTDAT, aes(x=LongDeg, y=LatDeg), size=1,color='red') +   #, colour=Period,colour=observed
-  facet_grid(period~fishery) +
-  geom_sf(fill="lightgrey",color = "black", lwd=0.5) +
-  
   ### ADJUST AXES AND LABELS
-  guides(colour=guide_legend(title="Observer"))+
-  scale_color_viridis_d(begin = .2, end = .8, direction = 1, name = "Observer:”) + for the tracks
-  scale_fill_viridis_d(begin = .2, end = .8, direction = -1, option = "B", name = "fate:”) + for fates
-
+  facet_grid(period~fishery) +
+  guides(colour=guide_legend(title="Observer",override.aes = list(size = 4)))+
+  scale_color_manual(values = c("#E69F00", "#56B4E9","#999999")) +
   xlab("Longitude")+
   ylab("Latitude")+
 
@@ -138,14 +145,15 @@ ggplot(data = world) +
         axis.text.y=element_text(size=14, color="black"),
         axis.text.x=element_text(size=12, color="black", angle=45,vjust=0.5), 
         axis.title=element_text(size=16),
-        legend.background = element_rect(),
+        legend.position="top",
+        legend.background = element_blank(),
         legend.title = element_text(size=16),
         legend.key = element_blank(),
         legend.text=element_text(size=14),
         strip.text=element_text(size=15, color="black"), 
         strip.background=element_rect(fill="white", colour="black"))
 
-ggsave("Figure1.jpg", width=7, height=12)
+ggsave("Figure1.jpg", width=7, height=15)
 
 
 
