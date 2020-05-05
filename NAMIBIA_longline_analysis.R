@@ -164,6 +164,7 @@ ggsave("Figure1.jpg", width=7, height=15)
 #### CALCULATE PROPORTION OF LONGLINE SETS THAT WERE COMPLETED BEFORE NAUTICAL DAWN (Reviewer request)
 ##############################################################
 
+
 setwd("C:\\STEFFEN\\RSPB\\Marine\\Bycatch\\Namibia")
 #setdat<-read_excel("Data\\Namibia_Demersal_Longline_Data_October 18.xlsx", sheet="4_Set") ## did not work because dates and times were messed up
 setdat<-fread("Data\\Namibia_Demersal_Longline_SettingTimes.csv")
@@ -211,12 +212,21 @@ setdat <- foadat %>%
 dim(setdat)
 head(setdat)
 
+
 ## SET THE TIME ZONE TO NAMIBIAN TIME
-tz(setdat$END)<-"Africa/Windhoek"
+## 5 MAY 2020: For all the 2016 and 2018 data the time should be UTC+2. But for 2017 it should be UTC+1 between 2nd April to 2nd September and UTC+2 for the rest of the year. 
+#tz(setdat$END)<-"Africa/Windhoek"
+utcdates<-seq(ymd("2017-04-02"),ymd("2017-09-02"),1)
+
+setdat<- setdat %>% mutate(END=if_else(date %in% utcdates,END-hours(1),END-hours(2))) %>%
+  mutate(START=if_else(date %in% utcdates,START-hours(1),START-hours(2)))
+tz(setdat$END)<-"UTC"
+tz(setdat$START)<-"UTC"
 
 ## CALCULATE DAWN TIME AND ADJUST TIME ZONE TO NAMIBIA
-setdat$dawn <- getSunlightTimes(data=setdat, keep = c("sunrise"), tz = "UTC")[,4]
-setdat$dawn <- with_tz(setdat$dawn,tzone="Africa/Windhoek")
+## must use nautical dawn , as that is ACAP requirement
+setdat$dawn <- getSunlightTimes(data=setdat, keep = c("nauticalDawn"), tz = "UTC")[,4]
+#setdat$dawn <- with_tz(setdat$dawn,tzone="Africa/Windhoek")
 tail(setdat)
 
 ## SUMMARISE PROPORTION OF SETS COMPLETED BEFORE DAWN
@@ -227,9 +237,19 @@ export<-setdat %>% mutate(beforeDawn=ifelse(END < dawn,1,0)) %>%
   #filter(year==2016)
   group_by(year,Observer) %>%
   summarise(prop=sum(beforeDawn)/length(beforeDawn), diff=mean(dawndiff), diff_sd=sd(dawndiff)) %>%
-  rename(`prop set before sunrise`=prop, `mean time to sunrise (hrs)`=diff,`sd time to sunrise (hrs)`=diff_sd)
+  rename(`prop set before nautical dawn`=prop, `mean time after nautical dawn (hrs)`=diff,`sd time after nautical dawn (hrs)`=diff_sd)
 
-fwrite(export,"Namibia_LL_set_sunrise_proportions.csv")
+fwrite(export,"Namibia_LL_set_nautical_dawn_proportions.csv")
+
+
+## TEST WHETHER SET TIME DIFFERS BETWEEN PHASES AND OBSERVERS
+testdatnd<-setdat %>% mutate(year=year(START)) %>%
+  mutate(dawndiff=ifelse(hour(END)>19,as.numeric(difftime(END,dawn,units="hours"))-24,as.numeric(difftime(END,dawn,units="hours")))) %>%
+  mutate(REG=ifelse(year>2015,"after","before"))
+
+#kruskal.test(x=testdatnd$dawndiff, g=as.factor(testdatnd$year)) ### very significant
+kruskal.test(x=testdatnd$dawndiff, g=as.factor(testdatnd$REG)) ### NOT SIGNIFICANT
+kruskal.test(x=testdatnd$dawndiff, g=as.factor(testdatnd$Observer)) ### NOT SIGNIFICANT
 
 
 
