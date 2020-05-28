@@ -226,8 +226,10 @@ tz(setdat$START)<-"UTC"
 ## CALCULATE DAWN TIME AND ADJUST TIME ZONE TO NAMIBIA
 ## must use nautical dawn , as that is ACAP requirement
 setdat$dawn <- getSunlightTimes(data=setdat, keep = c("nauticalDawn"), tz = "UTC")[,4]
+setdat$sunrise <- getSunlightTimes(data=setdat, keep = c("sunrise"), tz = "UTC")[,4]
 #setdat$dawn <- with_tz(setdat$dawn,tzone="Africa/Windhoek")
 tail(setdat)
+fwrite(setdat,"Namibia_LL_set_times_dawn_sunrise.csv")
 
 ## SUMMARISE PROPORTION OF SETS COMPLETED BEFORE DAWN
 export<-setdat %>% mutate(beforeDawn=ifelse(END < dawn,1,0)) %>%
@@ -239,7 +241,20 @@ export<-setdat %>% mutate(beforeDawn=ifelse(END < dawn,1,0)) %>%
   summarise(prop=sum(beforeDawn)/length(beforeDawn), diff=mean(dawndiff), diff_sd=sd(dawndiff)) %>%
   rename(`prop set before nautical dawn`=prop, `mean time after nautical dawn (hrs)`=diff,`sd time after nautical dawn (hrs)`=diff_sd)
 
-fwrite(export,"Namibia_LL_set_nautical_dawn_proportions.csv")
+fwrite(export,"Namibia_LL_setEND_nautical_dawn_proportions.csv")
+
+## SUMMARISE PROPORTION OF SETS STARTED BEFORE DAWN
+export<-setdat %>% mutate(beforeDawn=ifelse(START < dawn,1,0)) %>%
+  mutate(beforeDawn=ifelse(hour(START)>19,1,beforeDawn)) %>%
+  mutate(dawndiff=ifelse(hour(START)>19,as.numeric(difftime(START,dawn,units="hours"))-24,as.numeric(difftime(START,dawn,units="hours")))) %>%
+  mutate(year=year(START)) %>%
+  #filter(year==2016)
+  group_by(year,Observer) %>%
+  summarise(prop=sum(beforeDawn)/length(beforeDawn), diff=mean(dawndiff), diff_sd=sd(dawndiff)) %>%
+  rename(`prop started set before nautical dawn`=prop, `mean time after nautical dawn (hrs)`=diff,`sd time after nautical dawn (hrs)`=diff_sd)
+
+fwrite(export,"Namibia_LL_setSTART_nautical_dawn_proportions.csv")
+
 
 
 ## TEST WHETHER SET TIME DIFFERS BETWEEN PHASES AND OBSERVERS
