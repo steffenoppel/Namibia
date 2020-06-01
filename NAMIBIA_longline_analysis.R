@@ -113,9 +113,9 @@ head(PLOTDAT)
 dim(PLOTDAT)
 
 
-### REMOVE LOCATIONS ON LAND
+### REMOVE LOCATIONS BY FOA IN TRAWL AS WE DON'T INCLUDE IT IN ANALYSIS
 
-
+PLOTDAT <- PLOTDAT %>% filter(!(observed=="FOA" & fishery=="Trawl (wet fish)"))
 
 
 ### CREATE FIGURE 1 ###
@@ -238,6 +238,8 @@ export<-setdat %>% mutate(beforeDawn=ifelse(END < dawn,1,0)) %>%
   mutate(year=year(START)) %>%
   #filter(year==2016)
   group_by(year,Observer) %>%
+  #mutate(REG=ifelse(year(START)<2015,"before","after")) %>%
+  #group_by(REG) %>%
   summarise(prop=sum(beforeDawn)/length(beforeDawn), diff=mean(dawndiff), diff_sd=sd(dawndiff)) %>%
   rename(`prop set before nautical dawn`=prop, `mean time after nautical dawn (hrs)`=diff,`sd time after nautical dawn (hrs)`=diff_sd)
 
@@ -372,7 +374,7 @@ data %>% mutate(OBS=ifelse(is.na(Hooks_Observed),"FAO","ATF")) %>%
 
 ### for Results
 data %>%
-  dplyr::filter(!is.na(Hooks_Observed)) %>%
+  #dplyr::filter(!is.na(Hooks_Observed)) %>%
   group_by(Regulation) %>% 
   summarise(nset=sum(Total_Hooks_Set, na.rm=T),nretr=sum(Hooks_Recovered, na.rm=T),nobs=sum(Hooks_Observed, na.rm=T),nbird=sum(Birds_Obs_Caught))
 
