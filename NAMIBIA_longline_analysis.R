@@ -229,7 +229,7 @@ setdat$dawn <- getSunlightTimes(data=setdat, keep = c("nauticalDawn"), tz = "UTC
 setdat$sunrise <- getSunlightTimes(data=setdat, keep = c("sunrise"), tz = "UTC")[,4]
 #setdat$dawn <- with_tz(setdat$dawn,tzone="Africa/Windhoek")
 tail(setdat)
-fwrite(setdat,"Namibia_LL_set_times_dawn_sunrise.csv")
+#fwrite(setdat,"Namibia_LL_set_times_dawn_sunrise.csv")
 
 ## SUMMARISE PROPORTION OF SETS COMPLETED BEFORE DAWN
 export<-setdat %>% mutate(beforeDawn=ifelse(END < dawn,1,0)) %>%
@@ -241,7 +241,7 @@ export<-setdat %>% mutate(beforeDawn=ifelse(END < dawn,1,0)) %>%
   summarise(prop=sum(beforeDawn)/length(beforeDawn), diff=mean(dawndiff), diff_sd=sd(dawndiff)) %>%
   rename(`prop set before nautical dawn`=prop, `mean time after nautical dawn (hrs)`=diff,`sd time after nautical dawn (hrs)`=diff_sd)
 
-fwrite(export,"Namibia_LL_setEND_nautical_dawn_proportions.csv")
+#fwrite(export,"Namibia_LL_setEND_nautical_dawn_proportions.csv")
 
 ## SUMMARISE PROPORTION OF SETS STARTED BEFORE DAWN
 export<-setdat %>% mutate(beforeDawn=ifelse(START < dawn,1,0)) %>%
@@ -253,7 +253,14 @@ export<-setdat %>% mutate(beforeDawn=ifelse(START < dawn,1,0)) %>%
   summarise(prop=sum(beforeDawn)/length(beforeDawn), diff=mean(dawndiff), diff_sd=sd(dawndiff)) %>%
   rename(`prop started set before nautical dawn`=prop, `mean time after nautical dawn (hrs)`=diff,`sd time after nautical dawn (hrs)`=diff_sd)
 
-fwrite(export,"Namibia_LL_setSTART_nautical_dawn_proportions.csv")
+#fwrite(export,"Namibia_LL_setSTART_nautical_dawn_proportions.csv")
+
+
+## SUMMARISE NUMBER STATED IN TEXT
+setdat %>% mutate(dawndiff=ifelse(hour(END)>19,as.numeric(difftime(END,dawn,units="mins"))-24,as.numeric(difftime(END,dawn,units="mins")))) %>%
+  mutate(REG=ifelse(year(START)<2015,"before","after")) %>%
+  group_by(REG) %>%
+  summarise(diff=mean(dawndiff), diff_sd=sd(dawndiff))
 
 
 
@@ -349,14 +356,16 @@ data %>% dplyr::filter(Birds_Obs_Caught>35)
 ##############################################################
 
 head(data)
+unique(data$VESSEL_ID)
 
 ### for Methods
 data %>% group_by(Regulation) %>% mutate(count=1) %>%
+  mutate(VESSEL_ID=ifelse(VESSEL_ID=="Boston Wayferer","Boston Wayfarer",VESSEL_ID)) %>%
   summarise(nships=length(unique(VESSEL_ID)),ntrips=length(unique(Trip_ID)),nsets=sum(count))
 
 data %>% mutate(OBS=ifelse(is.na(Hooks_Observed),"FAO","ATF")) %>%
   mutate(count=1) %>%
-  filter(OBS=="ATF") %>%
+  #filter(OBS=="ATF") %>%
   group_by(OBS,Regulation) %>% 
   summarise(nsets=sum(count))
 
