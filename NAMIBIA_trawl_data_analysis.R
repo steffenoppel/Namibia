@@ -39,6 +39,7 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(data.table)
+library(janitor)
 filter<-dplyr::filter
 select<-dplyr::select
 
@@ -224,7 +225,7 @@ fwrite(deathtally,"Namibia.trawl.heavy.interactions_bySpecies.csv")
 ##############################################################
 
 # DEPLOYMENT OF BSL AFTER REGULATION
-obs.effort %>% filter(REG=="YES") %>%
+obs.effort %>% #filter(REG=="YES") %>%
   group_by(Tori_line_deployed) %>%
   summarise(n=count(OBSTRAWL_ID))
 
@@ -351,6 +352,7 @@ bootsummary$boot.ucl.heavy<-c(prereg.heavy.ci$percent[1,5],postreg.heavy.ci$perc
 
 #### CALCULATE THE CHANGE IN INTERACTION RATE ####
 percchange<-function(x){((x[1]-x[2])/x[1])*100}
+bootsummary<- as.data.frame(bootsummary) %>% adorn_totals("row") 
 bootsummary[3,3:11]<-apply(as.matrix(bootsummary[,3:11]),2,percchange)
 bootsummary[3,1]<-"CHANGE(%)"
 bootsummary
@@ -435,6 +437,7 @@ bootsummary2
 
 #### CALCULATE THE CHANGE IN INTERACTION RATE ####
 percchange<-function(x){((x[1]-x[2])/x[1])*100}
+bootsummary<- as.data.frame(bootsummary) %>% adorn_totals("row") 
 bootsummary2[3,3:8]<-apply(as.matrix(bootsummary2[,3:8]),2,percchange)
 bootsummary2[3,1]<-"CHANGE(%)"
 bootsummary2
@@ -520,6 +523,7 @@ bootsummary$boot.ucl.heavy<-c(prereg.heavy.ci$percent[1,5],postreg.heavy.ci$perc
 
 #### CALCULATE THE CHANGE IN INTERACTION RATE ####
 percchange<-function(x){((x[1]-x[2])/x[1])*100}
+bootsummary<- as.data.frame(bootsummary) %>% adorn_totals("row") 
 bootsummary[3,3:11]<-apply(as.matrix(bootsummary[,3:11]),2,percchange)
 bootsummary[3,1]<-"CHANGE(%)"
 bootsummary
@@ -652,7 +656,7 @@ WETeff %>% mutate(Year=year(DATE)) %>%
 ##############################################################
 
 ## subset the data
-NAM.set<- NAM.trawl %>%
+NAM.set<- NAM.trawl %>% #filter(!(REG==0 & Tori_line_deployed=="Yes")) %>%   ### Nina requested that on 31 May for rebuttal letter
   filter(Vessel_Activity=="Set")
 
 #### SUMMARISE MEAN AND CI FOR PRE-REG SAMPLES #######
@@ -675,6 +679,7 @@ bootsummary$boot.ucl.heavy<-c(prereg.heavy.ci$percent[1,5],postreg.heavy.ci$perc
 
 #### CALCULATE THE CHANGE IN INTERACTION RATE ####
 percchange<-function(x){((x[1]-x[2])/x[1])*100}
+bootsummary<- as.data.frame(bootsummary) %>% adorn_totals("row") 
 bootsummary[3,3:5]<-apply(as.matrix(bootsummary[,3:5]),2,percchange)
 bootsummary[3,1]<-"CHANGE(%)"
 bootsummary
@@ -710,6 +715,7 @@ bootsummary$boot.ucl.heavy<-c(prereg.heavy.ci$percent[1,5],postreg.heavy.ci$perc
 
 #### CALCULATE THE CHANGE IN INTERACTION RATE ####
 percchange<-function(x){((x[1]-x[2])/x[1])*100}
+bootsummary<- as.data.frame(bootsummary) %>% adorn_totals("row") 
 bootsummary[3,3:5]<-apply(as.matrix(bootsummary[,3:5]),2,percchange)
 bootsummary[3,1]<-"CHANGE(%)"
 bootsummary
@@ -745,6 +751,7 @@ bootsummary$boot.ucl.heavy<-c(prereg.heavy.ci$percent[1,5],postreg.heavy.ci$perc
 
 #### CALCULATE THE CHANGE IN INTERACTION RATE ####
 percchange<-function(x){((x[1]-x[2])/x[1])*100}
+bootsummary<- as.data.frame(bootsummary) %>% adorn_totals("row") 
 bootsummary[3,3:5]<-apply(as.matrix(bootsummary[,3:5]),2,percchange)
 bootsummary[3,1]<-"CHANGE(%)"
 bootsummary
@@ -779,6 +786,7 @@ bootsummary$boot.ucl.heavy<-c(prereg.heavy.ci$percent[1,5],postreg.heavy.ci$perc
 
 #### CALCULATE THE CHANGE IN INTERACTION RATE ####
 percchange<-function(x){((x[1]-x[2])/x[1])*100}
+bootsummary<- as.data.frame(bootsummary) %>% adorn_totals("row") 
 bootsummary[3,3:5]<-apply(as.matrix(bootsummary[,3:5]),2,percchange)
 bootsummary[3,1]<-"CHANGE(%)"
 bootsummary
