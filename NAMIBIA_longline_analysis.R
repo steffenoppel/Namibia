@@ -386,7 +386,7 @@ data %>%
 
 data %>% mutate(bycatch=ifelse(Birds_Obs_Caught==0,0,1)) %>%
   group_by(Regulation) %>% 
-  summarise(nset=sum(bycatch, na.rm=T),perc=mean(bycatch))
+  summarise(nset=length(OBSET_ID),nbycatchset=sum(bycatch, na.rm=T),perc=mean(bycatch))
 
 
 
