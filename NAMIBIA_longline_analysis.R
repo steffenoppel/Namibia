@@ -66,6 +66,28 @@ setwd("C:\\STEFFEN\\RSPB\\Marine\\Bycatch\\Namibia")
 LLdat<-read_excel("Data\\LL data combined 2016-2018.xlsx", sheet="Sheet1") ## not sure this has all data?
 head(LLdat)
 
+## histogram of survey effort
+LLdat %>% mutate(count=1) %>% group_by(Period, Month) %>%
+  summarise(TOT = sum(count)) %>%
+  ungroup() %>%
+  group_by(Period) %>%
+  mutate(prop=TOT/sum(TOT)) %>%
+  ggplot() + geom_bar(aes(x=Month,y=prop, fill=Period),stat="identity",position = "dodge") +
+  scale_x_continuous(limits=c(0.5,12.5), breaks=seq(1:12), labels=month.abb) +
+  ylab("Proportion of observed fishing trips") +
+  xlab("") +
+  theme(panel.background=element_rect(fill="white", colour="black"), 
+        axis.text.y=element_text(size=18, color="black"),
+        axis.text.x=element_text(size=14, color="black", angle=45, vjust=0.5), 
+        axis.title=element_text(size=20), 
+        strip.text.x=element_text(size=18, color="black"), 
+        strip.background=element_rect(fill="white", colour="black"),
+        legend.position=c(0.15,0.9),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank())
+
+
 LLdat <- LLdat %>% 
   mutate(LAT=LAT_DEG_Shoot+(LAT_MIN_Shoot/60)) %>%
   mutate(LON=LON_DEG_Shoot+(LON_MIN_Shoot/60)) %>%
@@ -153,7 +175,7 @@ ggplot(data = world) +
         strip.text=element_text(size=15, color="black"), 
         strip.background=element_rect(fill="white", colour="black"))
 
-ggsave("Figure1.jpg", width=7, height=15)
+#ggsave("Figure1.jpg", width=7, height=15)
 
 
 
@@ -358,7 +380,9 @@ data %>% dplyr::filter(Birds_Obs_Caught>35)
 ##############################################################
 
 head(data)
-unique(data$VESSEL_ID)
+boatnames<-data %>% group_by(VESSEL_ID) %>% mutate(count=1) %>%
+  dplyr::summarise(n_trips=length(unique(Trip_ID)), n_sets=sum(count))
+fwrite(boatnames,"Namibia_LL_summary_by_boat.csv")
 
 ### for Methods
 data %>% group_by(Regulation) %>% mutate(count=1) %>%
